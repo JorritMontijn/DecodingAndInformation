@@ -57,7 +57,7 @@ function [dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,db
 	intNeurons = size(matData,1);
 	[vecTrialTypeIdx,vecUniqueTrialTypes,vecCounts,cellSelect,vecRepetition] = label2idx(vecTrialTypes);
 	intStimTypes = length(vecUniqueTrialTypes);
-	intReps = intTrials/intStimTypes;
+	intRepNum = min(vecCounts);
 	
 	%pre-allocate output
 	matPosteriorProbability = zeros(intTrials,intStimTypes);
@@ -146,7 +146,6 @@ function [dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,db
 		end
 	elseif intTypeCV == 2
 		%remove repetition
-		intRepNum = intTrials/intStimTypes;
 		matAggWeights = zeros(intNeurons+1,intStimTypes,intRepNum);
 		if round(intRepNum) ~= intRepNum,error([mfilename ':IncompleteRepetitions'],'Number of repetitions is not an integer');end
 		for intRep=1:intRepNum

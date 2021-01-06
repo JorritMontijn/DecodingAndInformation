@@ -49,7 +49,7 @@ function [dblPerformance,vecDecodedIndexCV,matMahalDistsCV,dblMeanErrorDegs,matC
 	intNeurons = size(matData,2);
 	[vecTrialTypeIdx,vecUniqueTrialTypes,vecCounts,cellSelect,vecRepetition] = label2idx(vecTrialTypes);
 	intStimTypes = length(vecUniqueTrialTypes);
-	intReps = intTrials/intStimTypes;
+	intRepNum = min(vecCounts);
 	
 	%pre-allocate output
 	matMahalDistsCV = zeros(intTrials,intStimTypes);
@@ -143,7 +143,6 @@ function [dblPerformance,vecDecodedIndexCV,matMahalDistsCV,dblMeanErrorDegs,matC
 		end
 	elseif intTypeCV == 2
 		%remove repetition
-		intRepNum = intTrials/intStimTypes;
 		if round(intRepNum) ~= intRepNum,error([mfilename ':IncompleteRepetitions'],'Number of repetitions is not an integer');end
 		intTrial = 0;
 		for intRep=1:intRepNum

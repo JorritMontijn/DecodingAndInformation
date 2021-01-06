@@ -48,7 +48,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matTemplateDistsCV,dblMeanErrorDegs
 	intNeurons = size(matData,1);
 	[vecTrialTypeIdx,vecUniqueTrialTypes,vecCounts,cellSelect,vecRepetition] = label2idx(vecTrialTypes);
 	intStimTypes = length(vecUniqueTrialTypes);
-	intReps = intTrials/intStimTypes;
+	intRepNum = min(vecCounts);
 	
 	%pre-allocate output
 	matTemplates = nan(intNeurons,intStimTypes,2); %mean, sd
@@ -170,7 +170,6 @@ function [dblPerformanceCV,vecDecodedIndexCV,matTemplateDistsCV,dblMeanErrorDegs
 	
 	elseif intTypeCV == 2
 		%remove repetition
-		intRepNum = intTrials/intStimTypes;
 		if round(intRepNum) ~= intRepNum,error([mfilename ':IncompleteRepetitions'],'Number of repetitions is not an integer');end
 		for intRep=1:intRepNum
 			
@@ -226,7 +225,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matTemplateDistsCV,dblMeanErrorDegs
 	
 	%confusion matrix;
 	if nargout > 4
-		matConfusion = getFillGrid(zeros(intStimTypes),vecDecodedIndexCV,vecTrialTypeIdx,ones(intTrials,1))/intReps;
+		matConfusion = getFillGrid(zeros(intStimTypes),vecDecodedIndexCV,vecTrialTypeIdx,ones(intTrials,1))/intRepNum;
 		%imagesc(matConfusion,[0 1]);colormap(hot);axis xy;colorbar;
 	end
 	

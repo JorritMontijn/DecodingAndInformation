@@ -47,9 +47,9 @@ function [dblPerformance,vecDecodedIndexCV,matMahalDistsCV,dblMeanErrorDegs,matC
 		error([mfilename ':SameNeuronsTrials'],'Size of matData and vecTrialTypes do not match');
 	end
 	intNeurons = size(matData,2);
-	vecUniqueTrialTypes = unique(vecTrialTypes);
+	[vecTrialTypeIdx,vecUniqueTrialTypes,vecCounts,cellSelect,vecRepetition] = label2idx(vecTrialTypes);
 	intStimTypes = length(vecUniqueTrialTypes);
-	vecTrialTypeIdx = label2idx(vecTrialTypes);
+	intReps = intTrials/intStimTypes;
 	
 	%pre-allocate output
 	matMahalDistsCV = zeros(intTrials,intStimTypes);
@@ -149,10 +149,8 @@ function [dblPerformance,vecDecodedIndexCV,matMahalDistsCV,dblMeanErrorDegs,matC
 		for intRep=1:intRepNum
 			
 			%remove trials
-			intTrialStopRep = intRep*intStimTypes;
-			intTrialStartRep = intTrialStopRep - intStimTypes + 1;
 			indSelect = true(1,intTrials);
-			indSelect(intTrialStartRep:intTrialStopRep) = false;
+			indSelect(vecRepetition==intRep) = false;
 			matTrainData = matData(indSelect,:);
 			vecTrainTrialType = vecTrialTypeIdx(indSelect);
 			

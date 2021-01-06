@@ -1,7 +1,7 @@
 function [dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,dblMeanErrorDegs,matConfusion] = doCrossValidatedDecodingLR(matData,vecTrialTypes,intTypeCV,dblLambda)
-	%doCrossValidatedDecodingMD Multi-dimensional Mahalanobis-Distance classifier.
-	%[dblPerformance,vecDecodedIndexCV,matMahalDistsCV,dblMeanErrorDegs,matConfusion] = ...
-	%	doCrossValidatedDecodingMD(matData,vecTrialTypes,intTypeCV)
+	%doCrossValidatedDecodingLR Logistic regression classifier.
+	%[dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,dblMeanErrorDegs,matConfusion] = ...
+	%	doCrossValidatedDecodingLR(matData,vecTrialTypes,intTypeCV,dblLambda)
 	%
 	%Inputs:
 	% - matData; [n x p]  Matrix of n observations/trials of p predictors/neurons
@@ -9,11 +9,13 @@ function [dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,db
 	% - intTypeCV; [int or vec] Integer switch 0-2 or trial repetition vector. 
 	%				Val=0, no CV; val=1, leave-one-out CV, val=2 (or
 	%				vector), leave-repetition-out. 
+	% - dblLambda; [scalar] Ridge regularization parameter 
 	%
 	%Outputs:
 	% - dblPerformance; [scalar] Fraction of correct classifications
 	% - vecDecodedIndexCV; [n x 1] Decoded trial index vector of n observations/trials
-	% - matMahalDistsCV; [n x p] Mahalanobis distance to class mean
+	% - matPosteriorProbability; posterior probabilities
+	% - matWeights; weight matrix
 	% - dblMeanErrorDegs; [scalar] If vecTrialTypes is in radians, error in degrees
 	% - matConfusion; [c x c] Confusion matrix of [(decoded class) x (real class)]
 	%
@@ -24,16 +26,19 @@ function [dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,db
 	
 	%% check which kind of cross-validation
 	if nargin < 3 || isempty(intTypeCV)
-		intTypeCV = 1;
+		intTypeCV = 2;
 	end
 	if nargin < 4 || isempty(dblLambda)
 		dblLambda = 0;
 	end
 	
 	%% prepare
-	intVerbose = 1;
+	intVerbose = 0;
 	
 	%get number of trials
+	if ~all(isint(vecTrialTypes)) && range(vecTrialTypes) <= (2*pi)
+		vecTrialTypes = rad2deg(vecTrialTypes);
+	end
 	vecTrialTypes = vecTrialTypes(:);
 	intTrials = numel(vecTrialTypes);
 	
@@ -50,9 +55,9 @@ function [dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,db
 		error([mfilename ':SameNeuronsTrials'],'Size of matData and vecTrialTypes do not match');
 	end
 	intNeurons = size(matData,1);
-	vecUniqueTrialTypes = unique(vecTrialTypes);
+	[vecTrialTypeIdx,vecUniqueTrialTypes,vecCounts,cellSelect,vecRepetition] = label2idx(vecTrialTypes);
 	intStimTypes = length(vecUniqueTrialTypes);
-	vecTrialTypeIdx = label2idx(vecTrialTypes);
+	intReps = intTrials/intStimTypes;
 	
 	%pre-allocate output
 	matPosteriorProbability = zeros(intTrials,intStimTypes);
@@ -153,10 +158,8 @@ function [dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,db
 			end
 			
 			%remove trials
-			intTrialStopRep = intRep*intStimTypes;
-			intTrialStartRep = intTrialStopRep - intStimTypes + 1;
 			indSelect = true(1,intTrials);
-			indSelect(intTrialStartRep:intTrialStopRep) = false;
+			indSelect(vecRepetition==intRep) = false;
 			matTrainData = matData(:,indSelect);
 			vecTrainTrialType = vecTrialTypeIdx(indSelect);
 			matTestData = matData(:,~indSelect);

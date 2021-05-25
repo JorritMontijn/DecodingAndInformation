@@ -12,7 +12,7 @@ function [matY_hat,dblR2_CV,matB] = doCrossValidatedDecodingRR(matX,matY,varType
 	%Outputs:
 	% - matY_hat; Predicted values
 	% - dblR2_CV; R^2 of Y_hat
-	% - matB; Regression matrix
+	% - matB; [p x q] Regression matrix
 	%
 	%Version History:
 	%2021-02-22 Created function [by Jorrit Montijn]

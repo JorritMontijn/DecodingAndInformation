@@ -28,6 +28,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbabilityCV,dblMeanEr
     %1.2 - 6 Apr 2020
     %   Added prior distribution enforcement [by JM]
 	
+	%% prep
 	%check which kind of cross-validation
 	if ~exist('intTypeCV','var') || isempty(intTypeCV) || (numel(intTypeCV) == 1 && ~(intTypeCV < 3))
 		intTypeCV = 1;
@@ -55,16 +56,25 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbabilityCV,dblMeanEr
 	else
 		error([mfilename ':SameNeuronsTrials'],'Size of matData and vecTrialTypes do not match');
 	end
+	%remove neurons with range0
+	vecAllSd = xstd(matData,2);
+	indRem=vecAllSd==0;
+	matData(indRem,:)=[];
+	
+	%get data
 	intNeurons = size(matData,1);
 	[vecTrialTypeIdx,vecUniqueTrialTypes,vecCounts,cellSelect,vecRepetition] = label2idx(vecTrialTypes);
 	intStimTypes = length(vecUniqueTrialTypes);
 	intRepNum = min(vecCounts);
+	if numel(vecPriorDistribution) ~= intStimTypes || sum(vecPriorDistribution) ~= intTrials
+		error([mfilename ':MismatchPriorStimtypes'],'Size of vecPriorDistribution and vecTrialTypes do not match');
+	end
 	
 	%pre-allocate output
 	matLikelihood = nan(intNeurons,intStimTypes,2); %mean, sd
 	matPosteriorProbabilityCV = nan(intTrials,intStimTypes,intNeurons);
 	
-	%cross-validate
+	%% cross-validate
 	if numel(intTypeCV) > 1
 		%train/test set CV
 		intTypeCV = intTypeCV(:);
@@ -86,6 +96,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbabilityCV,dblMeanEr
 			if intVerbose > 0 && (mod(intStimType,10) == 0 || intTrials > 1000),fprintf('Preparing stimulus %d/%d [%s]\n',intStimType,intStimTypes,getTime);pause(eps);end
 			vecMu = xmean(matData(:,vecAllTrialTypes==dblStimTypeValue & indTrainTrials),2); %mean response this trial type per neuron
 			vecSD = xstd(matData(:,vecAllTrialTypes==dblStimTypeValue & indTrainTrials),2); %sd response this trial type per neuron
+			vecSD(vecSD==0)=vecAllSd(vecSD==0);
 			
 			%put data in likelihood parameter matrix
 			matLikelihood(:,intStimType,1) = vecMu;
@@ -105,6 +116,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbabilityCV,dblMeanEr
 			if intVerbose > 0 && (mod(intStimType,10) == 0 || intTrials > 1000),fprintf('Preparing stimulus %d/%d [%s]\n',intStimType,intStimTypes,getTime);pause(eps);end
 			vecMu = xmean(matData(:,vecTrialTypes==dblStimTypeValue),2); %mean response this trial type per neuron
 			vecSD = xstd(matData(:,vecTrialTypes==dblStimTypeValue),2); %sd response this trial type per neuron
+			vecSD(vecSD==0)=vecAllSd(vecSD==0);
 			
 			%put data in likelihood parameter matrix
 			matLikelihood(:,intStimType,1) = vecMu;
@@ -124,6 +136,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbabilityCV,dblMeanEr
 			if intVerbose > 0 && (mod(intStimType,10) == 0 || intTrials > 1000),fprintf('Preparing stimulus %d/%d [%s]\n',intStimType,intStimTypes,getTime);pause(eps);end
 			vecMu = xmean(matData(:,vecTrialTypes==dblStimTypeValue),2); %mean response this trial type per neuron
 			vecSD = xstd(matData(:,vecTrialTypes==dblStimTypeValue),2); %sd response this trial type per neuron
+			vecSD(vecSD==0)=vecAllSd(vecSD==0);
 			
 			%put data in likelihood parameter matrix
 			matLikelihood(:,intStimType,1) = vecMu;
@@ -146,6 +159,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbabilityCV,dblMeanEr
 			%calc CV mean + sd
 			vecMuCV = xmean(matData(:,(vecTrialTypes==dblTypeCVTrial)&indSelect),2);
 			vecSDCV = xstd(matData(:,(vecTrialTypes==dblTypeCVTrial)&indSelect),2)*(intReps/(intReps - 1));
+			vecSDCV(vecSDCV==0)=vecAllSd(vecSDCV==0);
 			
 			%calc CV parameters
 			matLikelihoodCV = matLikelihood;
@@ -165,20 +179,29 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbabilityCV,dblMeanEr
 		for intRep=1:intRepNum
 			
 			%remove trials
-			indSelect = true(1,intTrials);
-			indSelect(vecRepetition==intRep) = false;
-			matThisTrainData = matData(:,indSelect);
-			vecThisTrainTrialType = vecTrialTypes(indSelect);
+			indTrainTrials = true(1,intTrials);
+			indTrainTrials(vecRepetition==intRep) = false;
+			matThisTrainData = matData(:,indTrainTrials);
+			vecTrainTrialType = vecTrialTypes(indTrainTrials);
+			vecTestTrials = find(vecRepetition==intRep);
+			intTestTrials = numel(vecTestTrials);
 			
 			%build likelihood
+			matTempLikelihood = nan(intNeurons,intStimTypes,2); %mean, sd
 			for intStimType=1:intStimTypes
 				dblStimTypeValue = vecUniqueTrialTypes(intStimType);
-				vecMu = xmean(matThisTrainData(:,vecThisTrainTrialType==dblStimTypeValue),2); %mean response this trial type per neuron
-				vecSD = xstd(matThisTrainData(:,vecThisTrainTrialType==dblStimTypeValue),2); %sd response this trial type per neuron
+				vecMu = xmean(matThisTrainData(:,vecTrainTrialType==dblStimTypeValue),2); %mean response this trial type per neuron
+				vecSD = xstd(matThisTrainData(:,vecTrainTrialType==dblStimTypeValue),2); %sd response this trial type per neuron
+				vecSD(vecSD==0)=vecAllSd(vecSD==0);
+			
+				%put data in likelihood parameter matrix
+				matTempLikelihood(:,intStimType,1) = vecMu;
+				matTempLikelihood(:,intStimType,2) = vecSD;
 				
-				%get posterior for trials in repetition
-				for intTrialCV=vecThisRepTrials
-					matPosteriorProbabilityCV(intTrialCV,intStimType,:) = normpdf(matData(:,intTrialCV),vecMu,vecSD);
+				%calculate posterior
+				for intTrialIdx = 1:intTestTrials
+					intTrial = vecTestTrials(intTrialIdx);
+					matPosteriorProbabilityCV(intTrial,intStimType,:) = normpdf(matData(:,intTrial), matTempLikelihood(:,intStimType,1),matTempLikelihood(:,intStimType,2));
 				end
 			end
 			
@@ -188,7 +211,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbabilityCV,dblMeanEr
 		end
 	end
 	
-	%normal decoding or with prior distro?
+	%% normal decoding or with prior distro?
 	if isempty(vecPriorDistribution)
 		%calculate output; use summation in log-domain to avoid numerical errors
 		matPosteriorProbabilityCV(matPosteriorProbabilityCV==0)=nan;
@@ -205,15 +228,21 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbabilityCV,dblMeanEr
 			matP = nansum(-log(matPosteriorProbabilityCV),3);
 			[vecMinP,vecTempDecodedIndexCV]=min(matP,[],2);
 			matP(bsxfun(@eq,matP,vecMinP)) = nan;
-			[vecMin2P,dummy]=min(matP,[],2);
+			[vecMin2P,vecTempDecodedIndexCV2]=min(matP,[],2);
 			%use trial with largest difference between most likely and 2nd most likely stimulus
 			vecMinDiff = vecMin2P - vecMinP;
 			%assign trial
 			[dummy,intAssignTrial]=max(vecMinDiff);
 			intAssignType = vecTempDecodedIndexCV(intAssignTrial);
+			if vecPriorDistribution(intAssignType) == 0
+				intAssignType = vecTempDecodedIndexCV2(intAssignTrial);
+			end
 			vecDecodedIndexCV(intAssignTrial) = intAssignType;
 			indAssignedTrials(intAssignTrial) = true;
 			vecPriorDistribution(intAssignType) = vecPriorDistribution(intAssignType) - 1;
+			if vecPriorDistribution(intAssignType) == 0
+				matPosteriorProbabilityCV(:,intAssignType) = nan;
+			end
 		end
 	end
 	

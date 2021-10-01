@@ -102,7 +102,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbabilityCV,dblMeanEr
 			matLikelihood(:,intStimType,1) = vecMu;
 			matLikelihood(:,intStimType,2) = vecSD;
 			
-			%calculate non-CV posterior
+			%calculate test posterior
 			for intTrialIdx = 1:intTrials
 				intTrial = vecTestTrials(intTrialIdx);
 				matPosteriorProbabilityCV(intTrialIdx,intStimType,:) = normpdf(matData(:,intTrial), matLikelihood(:,intStimType,1),matLikelihood(:,intStimType,2));

@@ -1,4 +1,4 @@
-function [dblPerformanceCV,vecDecodedIndexCV,matTemplateDistsCV,dblMeanErrorDegs,matConfusion] = doCrossValidatedDecodingTM(matData,vecTrialTypes,intTypeCV)
+function [dblPerformanceCV,vecDecodedIndexCV,matTemplateDistsCV,dblMeanErrorDegs,matConfusion] = doCrossValidatedDecodingTM(matData,vecTrialTypes,intTypeCV,vecPriorDistribution)
 	%doCrossValidatedDecodingTM Perform cross-validated template matching decoding
 	%   [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbabilityCV,dblMeanErrorDegs,matConfusion] = ...
 	%		doCrossValidatedDecodingTM(matData,vecTrialTypes,intTypeCV)
@@ -11,6 +11,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matTemplateDistsCV,dblMeanErrorDegs
 	%		1 = leave-one-out (default)
 	%		2 = leave-repetition-out
 	%		v = vector of training trials (0) and test trials (1)
+	%   - vecPriorDistribution: (optional) vector specifying # per trial type
 	%
 	%Outputs:
 	%	- dblPerformanceCV; [scalar] Fraction of correctly decoded trials
@@ -23,6 +24,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matTemplateDistsCV,dblMeanErrorDegs
 	%1.0 - 28 Jan 2020
 	%	Rewrote TM decoder to match syntax of other scripts [by Jorrit Montijn]
 	
+	%% prep inputs
 	%check which kind of cross-validation
 	if nargin < 3 || isempty(intTypeCV) || (numel(intTypeCV) == 1 && ~(intTypeCV < 3))
 		intTypeCV = 1;
@@ -45,16 +47,25 @@ function [dblPerformanceCV,vecDecodedIndexCV,matTemplateDistsCV,dblMeanErrorDegs
 	else
 		error([mfilename ':SameNeuronsTrials'],'Size of matData and vecTrialTypes do not match');
 	end
+	%remove neurons with range0
+	vecAllSd = xstd(matData,2);
+	indRem=vecAllSd==0;
+	matData(indRem,:)=[];
+	
+	%get data
 	intNeurons = size(matData,1);
 	[vecTrialTypeIdx,vecUniqueTrialTypes,vecCounts,cellSelect,vecRepetition] = label2idx(vecTrialTypes);
 	intStimTypes = length(vecUniqueTrialTypes);
 	intRepNum = min(vecCounts);
+	if ~isempty(vecPriorDistribution) && (numel(vecPriorDistribution) ~= intStimTypes || sum(vecPriorDistribution) ~= intTrials)
+		error([mfilename ':MismatchPriorStimtypes'],'Size of vecPriorDistribution and vecTrialTypes do not match');
+	end
 	
 	%pre-allocate output
 	matTemplates = nan(intNeurons,intStimTypes,2); %mean, sd
 	matTemplateDistsCV = nan(intStimTypes,intTrials);
 		
-	%cross-validate
+	%% cross-validate
 	if numel(intTypeCV) > 1
 		%train/test set CV
 		intTypeCV = intTypeCV(:);
@@ -68,8 +79,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matTemplateDistsCV,dblMeanErrorDegs
 		
 		%change output to only test data
 		intTrials = numel(vecTestTrials);
-		matTemplateDistsCV = nan(intTrials,intStimTypes,intNeurons);
-	
+		
 		%build templates
 		for intStimType=1:intStimTypes
 			dblStimTypeValue = vecUniqueTrialTypes(intStimType);
@@ -178,6 +188,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matTemplateDistsCV,dblMeanErrorDegs
 			indSelect(vecRepetition==intRep) = false;
 			matThisTrainData = matData(:,indSelect);
 			vecThisTrainTrialType = vecTrialTypes(indSelect);
+			vecTestTrials = find(~indSelect);
 			
 			%get templates
 			matTemplatesCV = zeros(intNeurons,intStimTypes,2);
@@ -193,7 +204,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matTemplateDistsCV,dblMeanErrorDegs
 			
 			
 			%get posterior for trials in repetition
-			for intTrialCV=vecThisRepTrials
+			for intTrialCV=vecTestTrials
 				%get this response
 				vecR = matData(:,intTrialCV);
 				
@@ -211,8 +222,52 @@ function [dblPerformanceCV,vecDecodedIndexCV,matTemplateDistsCV,dblMeanErrorDegs
 		end
 	end
 	
-	%calculate output
-	[dummy,vecDecodedIndexCV]=min(matTemplateDistsCV,[],1);	
+	%% normal decoding or with prior distro?
+	if isempty(vecPriorDistribution)
+		%calculate output
+		%matPosteriorProbabilityCV(matPosteriorProbabilityCV==0)=nan;
+		%[dummy,vecDecodedIndexCV]=min(nansum(-log(matPosteriorProbabilityCV),3),[],2);
+		[dummy,vecDecodedIndexCV]=min(matTemplateDistsCV,[],1);	
+	else
+		%% loop through trials and assign next most certain trial
+		vecDecodedIndexCV = nan(intTrials,1);
+		indAssignedTrials = false(intTrials,1);
+		matTempDists = matTemplateDistsCV;
+		for intTrial=1:intTrials
+			%check if we're done
+			if sum(vecPriorDistribution==0)==(numel(vecPriorDistribution)-1)
+				vecDecodedIndexCV(~indAssignedTrials) = find(vecPriorDistribution>0);
+				break;
+			end
+			
+			%remove trials of type that has been chosen max number
+			matTempDists(vecPriorDistribution==0,:) = nan;
+			matTempDists(:,indAssignedTrials) = nan;
+		
+			%calculate probability of remaining trials and types
+			[vecTemplateDist,vecTempDecodedIndexCV]=min(matTempDists,[],1);	
+			%get 2nd most likely stim per trial
+			matDist2 = matTempDists;
+			for intT2=1:intTrials
+				matDist2(vecTempDecodedIndexCV(intT2),intT2) = nan;
+			end
+			[vecTemplateDist2,vecTempDecodedIndexCV2]=min(matDist2,[],1);
+			
+			%use trial with largest difference between most likely and 2nd most likely stimulus
+			vecMaxDiff = vecTemplateDist2 - vecTemplateDist;
+			%assign trial
+			[dummy,intAssignTrial]=max(vecMaxDiff);
+			intAssignType = vecTempDecodedIndexCV(intAssignTrial);
+			if vecPriorDistribution(intAssignType) == 0
+				intAssignType = vecTempDecodedIndexCV2(intAssignTrial);
+			end
+			vecDecodedIndexCV(intAssignTrial) = intAssignType;
+			indAssignedTrials(intAssignTrial) = true;
+			vecPriorDistribution(intAssignType) = vecPriorDistribution(intAssignType) - 1;
+			%fprintf('assigned %d to %d; %s\n',intAssignType,intAssignTrial,sprintf('%d ',vecPriorDistribution))
+			%pause
+		end
+	end
 	dblPerformanceCV=sum(vecDecodedIndexCV(:) == vecTrialTypeIdx)/length(vecDecodedIndexCV);
 	
 	%error

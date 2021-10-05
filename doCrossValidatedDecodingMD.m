@@ -161,11 +161,11 @@ function [dblPerformance,vecDecodedIndexCV,matMahalDistsCV,dblMeanErrorDegs,matC
 				
 				if boolUseMahalInvCov
 					matCovarInvTrain = inv(matCovarTrain);
-					vecMahal=getMahal(matData(intTrialStartRep:intTrialStopRep,:),vecMuTrain,matCovarInvTrain);
+					vecMahal=getMahal(matData(~indSelect,:),vecMuTrain,matCovarInvTrain);
 				else
-					vecMahal=getMahal2(matData(intTrialStartRep:intTrialStopRep,:),vecMuTrain,matCovarTrain);
+					vecMahal=getMahal2(matData(~indSelect,:),vecMuTrain,matCovarTrain);
 				end
-				matMahalDistsCV(intTrialStartRep:intTrialStopRep,intStimType) = vecMahal;
+				matMahalDistsCV(~indSelect,intStimType) = vecMahal;
 				
 				%msg
 				intTrial = intTrial + 1;

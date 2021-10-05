@@ -66,7 +66,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbabilityCV,dblMeanEr
 	[vecTrialTypeIdx,vecUniqueTrialTypes,vecCounts,cellSelect,vecRepetition] = label2idx(vecTrialTypes);
 	intStimTypes = length(vecUniqueTrialTypes);
 	intRepNum = min(vecCounts);
-	if numel(vecPriorDistribution) ~= intStimTypes || sum(vecPriorDistribution) ~= intTrials
+	if ~isempty(vecPriorDistribution) && (numel(vecPriorDistribution) ~= intStimTypes || sum(vecPriorDistribution) ~= intTrials)
 		error([mfilename ':MismatchPriorStimtypes'],'Size of vecPriorDistribution and vecTrialTypes do not match');
 	end
 	
@@ -158,7 +158,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbabilityCV,dblMeanEr
 			
 			%calc CV mean + sd
 			vecMuCV = xmean(matData(:,(vecTrialTypes==dblTypeCVTrial)&indSelect),2);
-			vecSDCV = xstd(matData(:,(vecTrialTypes==dblTypeCVTrial)&indSelect),2)*(intReps/(intReps - 1));
+			vecSDCV = xstd(matData(:,(vecTrialTypes==dblTypeCVTrial)&indSelect),2)*(intRepNum/(intRepNum - 1));
 			vecSDCV(vecSDCV==0)=vecAllSd(vecSDCV==0);
 			
 			%calc CV parameters

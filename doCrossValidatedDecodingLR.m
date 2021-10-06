@@ -110,6 +110,8 @@ function [dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,db
 
 	elseif intTypeCV == 1
 		%get prob dens
+		error('this does not result in a true cross-validation; still to check what is wrong');
+		
 		%get weights
 		[matWeights, vecLLH] = doMnLogReg(matData,vecTrialTypeIdx,dblLambda);
 		matAggWeights = zeros(intNeurons+1,intStimTypes,intTrials);

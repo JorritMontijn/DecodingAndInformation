@@ -1,4 +1,4 @@
-function [vecWeights, dblLLH] = doBinLogReg(matData, vecClasses, dblLambda)
+function [vecWeights, dblLLH, vecBinaryPrediction, vecPrediction] = doBinLogReg(matData, vecClasses, dblLambda)
 	% Binary (two-class) logistic regression
 	% Input:
 	%   matData: [neuron x trial] data matrix
@@ -7,6 +7,8 @@ function [vecWeights, dblLLH] = doBinLogReg(matData, vecClasses, dblLambda)
 	% Output:
 	%   vecWeights: weights
 	%   dblLLH: log-likelihood
+	%	vecBinaryPrediction
+	%	vecPrediction
 	% By Jorrit Montijn
 	
 	
@@ -15,7 +17,11 @@ function [vecWeights, dblLLH] = doBinLogReg(matData, vecClasses, dblLambda)
 	end
 	
 	%prep vars
-	vecClassIdx = label2idx(vecClasses)-1; %class index should be 0 or 1
+	[vecIdx,vecUnique,vecCounts,cellSelect,vecRepetition] = val2idx(vecClasses(:));
+	vecClassIdx = vecIdx(:)' - 1; %class index should be 0 or 1
+	if numel(vecClassIdx) == size(matData,1)
+		matData = matData';
+	end
 	matData = [matData; ones(1,size(matData,2))]; %add row of ones for intercepts
 	[intNeurons,intTrials] = size(matData); %number of predictors (neurons) and observations (trials)
 	intClasses = numel(unique(vecClasses)); %number of classes in data
@@ -26,10 +32,10 @@ function [vecWeights, dblLLH] = doBinLogReg(matData, vecClasses, dblLambda)
 	vecH = ones(1,intTrials);
 	vecH(vecClassIdx==0) = -1; %transform vecH to [-1 1] so we can use the sign to differentiate classes
 	vecWeights = zeros(intNeurons,1);
-	matPrediction = vecWeights'*matData;
+	vecPrediction = vecWeights'*matData;
 	
 	%do logistic regression
-	vecActivation = sigmoid(matPrediction);  
+	vecActivation = sigmoid(vecPrediction);  
 	vecR = vecActivation.*(1-vecActivation);  
 	Xw = bsxfun(@times, matData, sqrt(vecR));
 	matH = Xw*Xw';  
@@ -38,6 +44,11 @@ function [vecWeights, dblLLH] = doBinLogReg(matData, vecClasses, dblLambda)
 	vecG = matData*(vecActivation-vecClassIdx)'+dblLambda.*vecWeights;   
 	vecP = -matU\(matU'\vecG);                        
 	vecWeights = vecWeights+vecP;
-	matPrediction = vecWeights'*matData;
-	dblLLH = -sum(log1pexp(-vecH.*matPrediction))-0.5*sum(dblLambda.*vecWeights.^2);
+	vecPrediction = vecWeights'*matData;
+	dblLLH = -sum(log1pexp(-vecH.*vecPrediction))-0.5*sum(dblLambda.*vecWeights.^2);
+	%get binary prediction of labels
+	vecBinaryPrediction = vecPrediction;
+	vecBinaryPrediction(vecPrediction<0)=vecUnique(1);
+	vecBinaryPrediction(~(vecPrediction<0))=vecUnique(2);
+	
 end

@@ -11,7 +11,7 @@ function [dblPerformanceBin,vecDecodedIndex,matPosteriorProbability,matWeights,d
 	%get number of trials
 	vecTrialTypes = vecTrialTypes(:);
 	intTrials = numel(vecTrialTypes);
-	
+	error('cross-validation not implemented')
 	%check if matData is [trial x neuron] or [neuron x trial]
 	if size(matData,1) == intTrials && size(matData,2) == intTrials
 		%number of neurons and trials is the same
@@ -33,6 +33,7 @@ function [dblPerformanceBin,vecDecodedIndex,matPosteriorProbability,matWeights,d
 	idx2 = vecTrialTypeIdx==2;
 	
 	%% multinomial
+	tic
 	%get weights
 	[matWeights, vecLLH] = doMnLogReg(matData,vecTrialTypeIdx,dblLambda);
 	%get performance
@@ -43,10 +44,11 @@ function [dblPerformanceBin,vecDecodedIndex,matPosteriorProbability,matWeights,d
 	dblDprimeMnLogReg = getdprime2(matActivation(1,idx1),matActivation(1,idx2));
 	%decoding accuracy
 	dblPerformanceMn = sum(vecDecodedIndex(:)==vecTrialTypeIdx(:))/intTrials;
-	
+	toc
 	%% binary
+	tic
 	%get logistic regression output
-	[vecWeightsLogReg, dblLLH] = doBinLogReg(matData, vecTrialTypeIdx, dblLambda);
+	[vecWeightsLogReg, dblLLH] = doBinLogReg(matData', vecTrialTypeIdx', dblLambda);
 	%get performance
 	vecActBin = vecWeightsLogReg'*[matData;ones(1,size(matData,2))];
 	dblDprimeBinLogReg = getdprime2(vecActBin(idx1),vecActBin(idx2));	
@@ -54,7 +56,9 @@ function [dblPerformanceBin,vecDecodedIndex,matPosteriorProbability,matWeights,d
 	%decoding accuracy
 	dblPerformanceBin = sum(vecDecodedIndexBin(:)==vecTrialTypeIdx(:))/intTrials;
 	
-	
+	[vecWeights, dblLLH, vecBinaryPrediction, vecPrediction] = doBinLogReg(matData, vecTrialTypeIdx, dblLambda)
+	dblPerformanceBin = sum(vecBinaryPrediction(:)==vecTrialTypeIdx(:))/intTrials;
+	toc
 	%error
 	if nargout > 4
 		vecDecodedValues = vecUniqueTrialTypes(vecDecodedIndex);

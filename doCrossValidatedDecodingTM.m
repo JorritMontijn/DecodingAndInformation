@@ -30,6 +30,10 @@ function [dblPerformanceCV,vecDecodedIndexCV,matTemplateDistsCV,dblMeanErrorDegs
 		intTypeCV = 1;
 	end
 	intVerbose = 0;
+	%check prior
+	if ~exist('vecPriorDistribution','var')
+		vecPriorDistribution=[];
+	end
 	
 	%get number of trials
 	vecTrialTypes = vecTrialTypes(:);

@@ -185,9 +185,9 @@ function [dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,db
 	
 	%error
 	if nargout > 4
-		vecDecodedValuesCV = vecUniqueTrialTypes(vecDecodedIndexCV);
-		dblMeanErrorRads = mean(abs(circ_dist(vecDecodedValuesCV,vecTrialTypes)));
-		dblMeanErrorDegs = rad2ang(dblMeanErrorRads);
+		vecDecodedValuesCV = deg2rad(vecUniqueTrialTypes(vecDecodedIndexCV));
+		dblMeanErrorRads = mean(abs(circ_dist(vecDecodedValuesCV,deg2rad(vecTrialTypes))));
+		dblMeanErrorDegs = rad2deg(dblMeanErrorRads);
 	end
 	
 	%confusion matrix;

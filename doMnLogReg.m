@@ -35,8 +35,13 @@ function [matWeights, dblLLH] = newtonRaphson(matData, vecTrialTypes, dblLambda)
 	dblLLH = dot(spTargetClasses(:),matPosteriorProbabilities(:))-0.5*dblLambda*dot(matWeights(:),matWeights(:));
 	
 	%perform weight updates
+	hTic=tic;
 	matResidual = exp(matPosteriorProbabilities);
 	for intClass1 = 1:intClasses
+		if toc(hTic) > 5
+			fprintf('Running class %d/%d [%s]\n',intClass1,intClasses,getTime);
+			hTic=tic;
+		end
 		for intClass2 = 1:intClasses
 			vecR_Class1Class2 = matResidual(intClass1,:).*((intClass1==intClass2)-matResidual(intClass2,:));  %[1 x intTrial], r has negative value, so cannot use sqrt
 			matPredictUpdate(:,intClass1,:,intClass2) = bsxfun(@times,matData,vecR_Class1Class2)*matData';	%[intNeuron x intNeuron] difference in predictive value for class1 vs class2

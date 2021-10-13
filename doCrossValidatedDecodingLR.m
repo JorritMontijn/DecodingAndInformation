@@ -1,7 +1,7 @@
-function [dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,dblMeanErrorDegs,matConfusion] = doCrossValidatedDecodingLR(matData,vecTrialTypes,intTypeCV,dblLambda)
+function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErrorDegs,matConfusion,matWeights] = doCrossValidatedDecodingLR(matData,vecTrialTypes,intTypeCV,vecPriorDistribution,dblLambda)
 	%doCrossValidatedDecodingLR Logistic regression classifier.
-	%[dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,dblMeanErrorDegs,matConfusion] = ...
-	%	doCrossValidatedDecodingLR(matData,vecTrialTypes,intTypeCV,dblLambda)
+	%[dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErrorDegs,matConfusion,matWeights] = ...
+	%	doCrossValidatedDecodingLR(matData,vecTrialTypes,intTypeCV,vecPriorDistribution,dblLambda)
 	%
 	%Inputs:
 	% - matData; [n x p]  Matrix of n observations/trials of p predictors/neurons
@@ -9,20 +9,23 @@ function [dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,db
 	% - intTypeCV; [int or vec] Integer switch 0-2 or trial repetition vector. 
 	%				Val=0, no CV; val=1, leave-one-out CV, val=2 (or
 	%				vector), leave-repetition-out. 
+	% - vecPriorDistribution: (optional) vector specifying # per trial type
 	% - dblLambda; [scalar] Ridge regularization parameter 
 	%
 	%Outputs:
 	% - dblPerformance; [scalar] Fraction of correct classifications
 	% - vecDecodedIndexCV; [n x 1] Decoded trial index vector of n observations/trials
 	% - matPosteriorProbability; posterior probabilities
-	% - matWeights; weight matrix
 	% - dblMeanErrorDegs; [scalar] If vecTrialTypes is in radians, error in degrees
 	% - matConfusion; [c x c] Confusion matrix of [(decoded class) x (real class)]
+	% - matWeights; weight matrix
 	%
 	%Version History:
 	%2015-xx-xx Created function [by Jorrit Montijn]
 	%2019-05-27 Optimized code and added support for trial repetition index
 	%			as cross-validation argument [by JM] 
+	%2021-10-12 Added prior support and changed argument order to match
+	%			other decoding functions [by JM]
 	
 	%% check which kind of cross-validation
 	if nargin < 3 || isempty(intTypeCV)
@@ -30,6 +33,14 @@ function [dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,db
 	end
 	if nargin < 4 || isempty(dblLambda)
 		dblLambda = 0;
+	end
+	if numel(dblLambda) ~= 1
+		error([mfilename ':LambdaError'],'Lambda must be scalar');
+	end
+	
+	%prior distribution
+	if ~exist('vecPriorDistribution','var')
+		vecPriorDistribution = [];
 	end
 	
 	%% prepare
@@ -58,9 +69,12 @@ function [dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,db
 	[vecTrialTypeIdx,vecUniqueTrialTypes,vecCounts,cellSelect,vecRepetition] = label2idx(vecTrialTypes);
 	intStimTypes = length(vecUniqueTrialTypes);
 	intRepNum = min(vecCounts);
+	if ~isempty(vecPriorDistribution) && (numel(vecPriorDistribution) ~= intStimTypes || sum(vecPriorDistribution) ~= intTrials)
+		error([mfilename ':MismatchPriorStimtypes'],'Size of vecPriorDistribution and vecTrialTypes do not match');
+	end
 	
 	%pre-allocate output
-	matPosteriorProbability = zeros(intTrials,intStimTypes);
+	matPosteriorProbability = zeros(intStimTypes,intTrials);
 	ptrTic = tic;
 	%% cross-validate
 	if numel(intTypeCV) == intTrials
@@ -91,7 +105,7 @@ function [dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,db
 			%get performance
 			matDataPlusLin = [matTestData; ones(1,size(matTestData,2))];
 			matActivation = matWeights'*matDataPlusLin;
-			matPosteriorProbability(indThisRep,:) = exp(bsxfun(@minus,matActivation,logsumexp(matActivation,1)))'; %softmax
+			matPosteriorProbability(:,indThisRep) = exp(bsxfun(@minus,matActivation,logsumexp(matActivation,1))); %softmax
 
 		end
 		
@@ -106,7 +120,7 @@ function [dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,db
 		%get performance
 		matDataPlusLin = [matData; ones(1,size(matData,2))];
 		matActivation = matWeights'*matDataPlusLin;
-		matPosteriorProbability = exp(bsxfun(@minus,matActivation,logsumexp(matActivation,1)))'; %softmax
+		matPosteriorProbability = exp(bsxfun(@minus,matActivation,logsumexp(matActivation,1))); %softmax
 
 	elseif intTypeCV == 1
 		%get prob dens
@@ -119,7 +133,7 @@ function [dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,db
 		%get performance
 		matDataPlusLin = [matData; ones(1,size(matData,2))];
 		matActivation = matWeights'*matDataPlusLin;
-		matPosteriorProbability = exp(bsxfun(@minus,matActivation,logsumexp(matActivation,1)))'; %softmax
+		matPosteriorProbability = exp(bsxfun(@minus,matActivation,logsumexp(matActivation,1))); %softmax
 
 		%leave one out
 		for intLeaveOut=1:intTrials
@@ -137,7 +151,7 @@ function [dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,db
 			matDataPlusLin = [matTestData; ones(1,size(matTestData,2))];
 			matActivation = matWeights'*matDataPlusLin;
 			vecMax = exp(bsxfun(@minus,matActivation,logsumexp(matActivation,1)))';
-			matPosteriorProbability(intLeaveOut,intTypeCVTrial) = vecMax(intTypeCVTrial); %softmax
+			matPosteriorProbability(intTypeCVTrial,intLeaveOut) = vecMax(intTypeCVTrial); %softmax
 			
 			%msg
 			if toc(ptrTic) > 5
@@ -172,28 +186,75 @@ function [dblPerformance,vecDecodedIndexCV,matPosteriorProbability,matWeights,db
 			%get performance
 			matDataPlusLin = [matTestData; ones(1,size(matTestData,2))];
 			matActivation = matWeights'*matDataPlusLin;
-			matPosteriorProbability(~indSelect,:) = exp(bsxfun(@minus,matActivation,logsumexp(matActivation,1)))'; %softmax
+			matPosteriorProbability(:,~indSelect) = exp(bsxfun(@minus,matActivation,logsumexp(matActivation,1))); %softmax
 		end
 	else
 		error([mfilename ':SyntaxError'],'CV type not recognized');
 	end
 	
-	%output
-	[dummy, vecDecodedIndexCV] = max(matPosteriorProbability,[],2);
-	dblPerformance=sum(vecDecodedIndexCV==vecTrialTypeIdx)/intTrials;
-	matWeights = mean(matAggWeights,3);
+	% normal decoding or with prior distro?
+	if isempty(vecPriorDistribution)
+		%calculate output
+		[dummy, vecDecodedIndexCV] = max(matPosteriorProbability,[],1);
+	else
+		%% loop through trials and assign next most certain trial
+		vecDecodedIndexCV = nan(intTrials,1);
+		indAssignedTrials = false(intTrials,1);
+		matTempProbs = matPosteriorProbability;
+		for intTrial=1:intTrials
+			%check if we're done
+			if sum(vecPriorDistribution==0)==(numel(vecPriorDistribution)-1)
+				vecDecodedIndexCV(~indAssignedTrials) = find(vecPriorDistribution>0);
+				break;
+			end
+			
+			%remove trials of type that has been chosen max number
+			matTempProbs(vecPriorDistribution==0,:) = nan;
+			matTempProbs(:,indAssignedTrials) = nan;
+		
+			%calculate probability of remaining trials and types
+			[vecTempProbs,vecTempDecodedIndexCV]=max(matTempProbs,[],1);	
+			%get 2nd most likely stim per trial
+			matDist2 = matTempProbs;
+			for intT2=1:intTrials
+				matDist2(vecTempDecodedIndexCV(intT2),intT2) = nan;
+			end
+			[vecTempProbs2,vecTempDecodedIndexCV2]=max(matDist2,[],1);
+			
+			%use trial with largest difference between most likely and 2nd most likely stimulus
+			vecMaxDiff = abs(vecTempProbs2 - vecTempProbs);
+			%assign trial
+			[dummy,intAssignTrial]=max(vecMaxDiff);
+			intAssignType = vecTempDecodedIndexCV(intAssignTrial);
+			if vecPriorDistribution(intAssignType) == 0
+				intAssignType = vecTempDecodedIndexCV2(intAssignTrial);
+			end
+			vecDecodedIndexCV(intAssignTrial) = intAssignType;
+			indAssignedTrials(intAssignTrial) = true;
+			vecPriorDistribution(intAssignType) = vecPriorDistribution(intAssignType) - 1;
+			%fprintf('assigned %d to %d; %s\n',intAssignType,intAssignTrial,sprintf('%d ',vecPriorDistribution))
+			%pause
+		end
+	end
+	dblPerformanceCV=sum(vecDecodedIndexCV(:) == vecTrialTypeIdx)/length(vecDecodedIndexCV);
+	
 	
 	%error
-	if nargout > 4
+	if nargout > 3
 		vecDecodedValuesCV = deg2rad(vecUniqueTrialTypes(vecDecodedIndexCV));
 		dblMeanErrorRads = mean(abs(circ_dist(vecDecodedValuesCV,deg2rad(vecTrialTypes))));
 		dblMeanErrorDegs = rad2deg(dblMeanErrorRads);
 	end
 	
 	%confusion matrix;
-	if nargout > 5
+	if nargout > 4
 		matConfusion = getFillGrid(zeros(intStimTypes),vecDecodedIndexCV,vecTrialTypeIdx,ones(intTrials,1));
 		%imagesc(matConfusion,[0 1]);colormap(hot);axis xy;colorbar;
+	end
+	
+	%calc aggregate weights
+	if nargout > 5
+		matWeights = mean(matAggWeights,3);
 	end
 end
 

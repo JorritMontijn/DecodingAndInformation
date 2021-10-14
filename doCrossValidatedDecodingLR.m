@@ -28,10 +28,10 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 	%			other decoding functions [by JM]
 	
 	%% check which kind of cross-validation
-	if nargin < 3 || isempty(intTypeCV)
+	if ~exist('intTypeCV','var') || isempty(intTypeCV)
 		intTypeCV = 2;
 	end
-	if nargin < 4 || isempty(dblLambda)
+	if ~exist('dblLambda','var') || isempty(dblLambda)
 		dblLambda = 0;
 	end
 	if numel(dblLambda) ~= 1

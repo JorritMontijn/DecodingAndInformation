@@ -66,7 +66,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 		error([mfilename ':SameNeuronsTrials'],'Size of matData and vecTrialTypes do not match');
 	end
 	intNeurons = size(matData,1);
-	[vecTrialTypeIdx,vecUniqueTrialTypes,vecCounts,cellSelect,vecRepetition] = label2idx(vecTrialTypes);
+	[vecTrialTypeIdx,vecUniqueTrialTypes,vecCounts,cellSelect,vecRepetition] = val2idx(vecTrialTypes);
 	intStimTypes = length(vecUniqueTrialTypes);
 	intRepNum = min(vecCounts);
 	if ~isempty(vecPriorDistribution) && (numel(vecPriorDistribution) ~= intStimTypes || sum(vecPriorDistribution) ~= intTrials)

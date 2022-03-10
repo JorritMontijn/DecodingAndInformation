@@ -192,6 +192,11 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 		error([mfilename ':SyntaxError'],'CV type not recognized');
 	end
 	
+	%check if posterior is valid
+	if any(isnan(matPosteriorProbability))
+		error([mfilename ':PosteriorNaN'],'Posterior contains NaNs; either your data are corrupt or contain zero-variance predictors. Try increasing the regularization parameter lamdba to improve numerical stability');
+	end
+	
 	% normal decoding or with prior distro?
 	if isempty(vecPriorDistribution)
 		%calculate output

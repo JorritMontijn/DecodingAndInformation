@@ -3,30 +3,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 	%[dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErrorDegs,matConfusion,matWeights,matAggActivation] = ...
 	%	doCrossValidatedDecodingLR(matData,vecTrialTypes,intTypeCV,vecPriorDistribution,dblLambda)
 	%
-	%Inputs:
-	% - matData; [n x p]  Matrix of n observations/trials of p predictors/neurons
-	% - vecTrialTypes; [n x 1] Trial indexing vector of c classes in n observations/trials
-	% - intTypeCV; [int or vec] Integer switch 0-2 or trial repetition vector. 
-	%				Val=0, no CV; val=1, leave-one-out CV, val=2 (or
-	%				vector), leave-repetition-out. 
-	% - vecPriorDistribution: (optional) vector specifying # per trial type
-	% - dblLambda; [scalar] Ridge regularization parameter 
-	%
-	%Outputs:
-	% - dblPerformance; [scalar] Fraction of correct classifications
-	% - vecDecodedIndexCV; [n x 1] Decoded trial index vector of n observations/trials
-	% - matPosteriorProbability; posterior probabilities
-	% - dblMeanErrorDegs; [scalar] If vecTrialTypes is in radians, error in degrees
-	% - matConfusion; [c x c] Confusion matrix of [(decoded class) x (real class)]
-	% - matWeights; averaged weight matrix (not cross-validated!)
-	% - matAggActivation; CV activation matrix
-	%
-	%Version History:
-	%2015-xx-xx Created function [by Jorrit Montijn]
-	%2019-05-27 Optimized code and added support for trial repetition index
-	%			as cross-validation argument [by JM] 
-	%2021-10-12 Added prior support and changed argument order to match
-	%			other decoding functions [by JM]
+	%CV GLM classifier
 	
 	%% check which kind of cross-validation
 	if ~exist('intTypeCV','var') || isempty(intTypeCV)
@@ -77,6 +54,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 	%pre-allocate output
 	matPosteriorProbability = zeros(intStimTypes,intTrials);
 	matAggActivation = zeros(intStimTypes,intTrials);
+	vecDecodedIndexCV = nan(1,intTrials);
 	
 	ptrTic = tic;
 	%% cross-validate
@@ -165,7 +143,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 		end
 	elseif intTypeCV == 2
 		%remove repetition
-		matAggWeights = zeros(intNeurons+1,intStimTypes,intRepNum);
+		matAggWeights = zeros(intNeurons+1,intStimTypes-1,intRepNum);
 		if round(intRepNum) ~= intRepNum,error([mfilename ':IncompleteRepetitions'],'Number of repetitions is not an integer');end
 		for intRep=1:intRepNum
 			%msg
@@ -181,70 +159,27 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 			matTrainData = matData(:,indSelect);
 			vecTrainTrialType = vecTrialTypeIdx(indSelect);
 			matTestData = matData(:,~indSelect);
+			vecTestTrialType = vecTrialTypeIdx(~indSelect);
 			
-			%get weights
-			[matWeights, vecLLH] = doMnLogReg(matTrainData,vecTrainTrialType,dblLambda);
+			%glm
+			%{
+			mdl = fitglm(matTrainData',vecTrainTrialType);
+			ypred = predict(mdl,matTestData');
+			yDist = ypred - vecTestTrialType';
+			[vecMinDist,vecDecodedIdx] = min(abs(yDist),[],2);
+			vecDecodedIndexCV(~indSelect) = vecDecodedIdx;
+			%}
+			%lda
+			%%{
+			vecDecodedIndexCV(~indSelect) = classify(matTestData',matTrainData',vecTrainTrialType,'linear') ;
+			%}
 			
-			%get performance
-			matAggWeights(:,:,intRep) = matWeights;
-			matDataPlusLin = [matTestData; ones(1,size(matTestData,2))];
-			matActivation = matWeights'*matDataPlusLin;
-			matAggActivation(:,~indSelect) = matActivation;
-			matPosteriorProbability(:,~indSelect) = exp(bsxfun(@minus,matActivation,logsumexp(matActivation,1))); %softmax
+			%nbKD = fitctree(matTrainData', vecTrainTrialType);
+			%nbKD = fitcnb(matTrainData', vecTrainTrialType, 'DistributionNames','kernel', 'Kernel','box');
+			%vecDecodedIndexCV(~indSelect) = predict(nbKD, matTestData');
 		end
 	else
 		error([mfilename ':SyntaxError'],'CV type not recognized');
-	end
-	
-	%check if posterior is valid
-	if any(isnan(matPosteriorProbability))
-		warning([mfilename ':PosteriorNaN'],'Posterior contains NaNs; either your data are corrupt or contain zero-variance predictors. Try increasing the regularization parameter lamdba to improve numerical stability. I have set all nans to 0.');
-		matPosteriorProbability(isnan(matPosteriorProbability))=0;
-	end
-	
-	% normal decoding or with prior distro?
-	if isempty(vecPriorDistribution)
-		%calculate output
-		[dummy, vecDecodedIndexCV] = max(matPosteriorProbability,[],1);
-	else
-		%% loop through trials and assign next most certain trial
-		vecDecodedIndexCV = nan(intTrials,1);
-		indAssignedTrials = false(intTrials,1);
-		matTempProbs = matPosteriorProbability;
-		for intTrial=1:intTrials
-			%check if we're done
-			if sum(vecPriorDistribution==0)==(numel(vecPriorDistribution)-1)
-				vecDecodedIndexCV(~indAssignedTrials) = find(vecPriorDistribution>0);
-				break;
-			end
-			
-			%remove trials of type that has been chosen max number
-			matTempProbs(vecPriorDistribution==0,:) = nan;
-			matTempProbs(:,indAssignedTrials) = nan;
-		
-			%calculate probability of remaining trials and types
-			[vecTempProbs,vecTempDecodedIndexCV]=max(matTempProbs,[],1);	
-			%get 2nd most likely stim per trial
-			matDist2 = matTempProbs;
-			for intT2=1:intTrials
-				matDist2(vecTempDecodedIndexCV(intT2),intT2) = nan;
-			end
-			[vecTempProbs2,vecTempDecodedIndexCV2]=max(matDist2,[],1);
-			
-			%use trial with largest difference between most likely and 2nd most likely stimulus
-			vecMaxDiff = abs(vecTempProbs2 - vecTempProbs);
-			%assign trial
-			[dummy,intAssignTrial]=max(vecMaxDiff);
-			intAssignType = vecTempDecodedIndexCV(intAssignTrial);
-			if vecPriorDistribution(intAssignType) == 0
-				intAssignType = vecTempDecodedIndexCV2(intAssignTrial);
-			end
-			vecDecodedIndexCV(intAssignTrial) = intAssignType;
-			indAssignedTrials(intAssignTrial) = true;
-			vecPriorDistribution(intAssignType) = vecPriorDistribution(intAssignType) - 1;
-			%fprintf('assigned %d to %d; %s\n',intAssignType,intAssignTrial,sprintf('%d ',vecPriorDistribution))
-			%pause
-		end
 	end
 	dblPerformanceCV=sum(vecDecodedIndexCV(:) == vecTrialTypeIdx)/length(vecDecodedIndexCV);
 	

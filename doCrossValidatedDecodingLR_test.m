@@ -143,7 +143,9 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 		end
 	elseif intTypeCV == 2
 		%remove repetition
-		matAggWeights = zeros(intNeurons+1,intStimTypes-1,intRepNum);
+		matAggWeights = zeros(intNeurons+1,intStimTypes,intRepNum);
+		%remove repetition
+		%matAggWeights = zeros(intNeurons+1,intStimTypes-1,intRepNum);
 		if round(intRepNum) ~= intRepNum,error([mfilename ':IncompleteRepetitions'],'Number of repetitions is not an integer');end
 		for intRep=1:intRepNum
 			%msg
@@ -171,7 +173,10 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 			%}
 			%lda
 			%%{
-			vecDecodedIndexCV(~indSelect) = classify(matTestData',matTrainData',vecTrainTrialType,'linear') ;
+			[class,err,POSTERIOR,logp,coeff] = classify(matTestData',matTrainData',vecTrainTrialType,'linear');
+			vecDecodedIndexCV(~indSelect) = class;
+			matPosteriorProbability(:,~indSelect) = POSTERIOR;
+			
 			%}
 			
 			%nbKD = fitctree(matTrainData', vecTrainTrialType);

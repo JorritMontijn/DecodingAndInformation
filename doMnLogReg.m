@@ -46,7 +46,7 @@ function [matWeights, dblLLH] = newtonRaphson(matData, vecTrialTypes, dblLambda)
 		matResidual = exp(matPosteriorProbabilities);
 		for intClass1 = 1:intClasses
 			if toc(hTic) > 5
-				fprintf('Running class %d/%d [%s]\n',intClass1,intClasses,getTime);
+				%fprintf('Running class %d/%d [%s]\n',intClass1,intClasses,getTime);
 				hTic=tic;
 			end
 			for intClass2 = 1:intClasses

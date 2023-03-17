@@ -34,7 +34,7 @@ function [matY_hat,dblR2_CV,matB] = doCrossValidatedDecodingRR(matX,matY,varType
 	end
 	%check if input is zero-centered
 	dblWarnLim =  1e-10;
-	dblMaxMean = max(abs(mean(matX,2) ./ range(matX,2)));
+	dblMaxMean = max(abs(mean(matX,1) ./ range(matX,1)));
 	if dblMaxMean > dblWarnLim
 		warning([mfilename ':MeansNotZeroCentered'],'Means in X are not zero-centered; this probably reduces linear predictability!');
 	end

@@ -5,7 +5,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbabilityCV,dblMeanEr
 	%
 	%Inputs:
 	%	- matData; [N by T] Neurons by trials response matrix
-	%	- vecTrialTypes: [1 by T] Trial type per trial
+	%	- vecTrialTypes: [1 by T] Trial type per trial (orientation in degrees)
 	%	- intTypeCV: [scalar or vector] Type of cross-validation:
 	%		0 = none
 	%		1 = leave-one-out (default)
@@ -249,9 +249,13 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbabilityCV,dblMeanEr
 	%error
 	dblPerformanceCV = sum(vecDecodedIndexCV == vecTrialTypeIdx)/length(vecDecodedIndexCV);
 	if nargout > 3
+		if range(vecUniqueTrialTypes) > (2*pi)
+			vecUniqueTrialTypes = deg2rad(vecUniqueTrialTypes);
+			vecTrialTypes = deg2rad(vecTrialTypes);
+		end
 		vecDecodedValuesCV = vecUniqueTrialTypes(vecDecodedIndexCV);
 		dblMeanErrorRads = mean(abs(circ_dist(vecDecodedValuesCV,vecTrialTypes)));
-		dblMeanErrorDegs = rad2ang(dblMeanErrorRads);
+		dblMeanErrorDegs = rad2deg(dblMeanErrorRads);
 	end
 	
 	

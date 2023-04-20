@@ -1,7 +1,8 @@
-function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErrorDegs,matConfusion,matWeights,matAggActivation,matAggWeights,vecRepetition] = doCrossValidatedDecodingLR(matData,vecTrialTypes,intTypeCV,vecPriorDistribution,dblLambda)
-	%doCrossValidatedDecodingLR Logistic regression classifier.
-	%[dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErrorDegs,matConfusion,matWeights,matAggActivation,matAggWeights,vecRepetition] = ...
-	%	doCrossValidatedDecodingLR(matData,vecTrialTypes,intTypeCV,vecPriorDistribution,dblLambda)
+function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErrorDegs,matConfusion,matWeights,matAggActivation] = ...
+		doCrossValidatedDecoding(matData,vecTrialTypes,intTypeCV,vecPriorDistribution,dblLambda)
+	%doCrossValidatedDecoding Linear multivariate Gaussian decoder
+	%[dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErrorDegs,matConfusion,matWeights,matAggActivation] = ...
+	%	doCrossValidatedDecoding(matData,vecTrialTypes,intTypeCV,vecPriorDistribution,dblLambda)
 	%
 	%Inputs:
 	% - matData; [n x p]  Matrix of n observations/trials of p predictors/neurons
@@ -10,7 +11,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 	%				Val=0, no CV; val=1, leave-one-out CV, val=2 (or
 	%				vector), leave-repetition-out. 
 	% - vecPriorDistribution: (optional) vector specifying # per trial type
-	% - dblLambda; [scalar] Ridge regularization parameter 
+	% - dblLambda; [scalar] Regularization: 0=full MVN, inf=independent naive Bayes, in-between=mix
 	%
 	%Outputs:
 	% - dblPerformance; [scalar] Fraction of correct classifications
@@ -22,11 +23,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 	% - matAggActivation; CV activation matrix
 	%
 	%Version History:
-	%2015-xx-xx Created function [by Jorrit Montijn]
-	%2019-05-27 Optimized code and added support for trial repetition index
-	%			as cross-validation argument [by JM] 
-	%2021-10-12 Added prior support and changed argument order to match
-	%			other decoding functions [by JM]
+	%2023-04-20 Created function [by Jorrit Montijn]
 	
 	%% check which kind of cross-validation
 	if ~exist('intTypeCV','var') || isempty(intTypeCV)
@@ -35,8 +32,8 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 	if ~exist('dblLambda','var') || isempty(dblLambda)
 		dblLambda = 0;
 	end
-	if numel(dblLambda) ~= 1
-		error([mfilename ':LambdaError'],'Lambda must be scalar');
+	if numel(dblLambda) ~= 1 || dblLambda < 0
+		error([mfilename ':LambdaError'],'Lambda must be non-negative scalar');
 	end
 	
 	%prior distribution
@@ -45,7 +42,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 	end
 	
 	%% prepare
-	intVerbose = 1;
+	intVerbose = 0;
 	
 	%get number of trials
 	if ~all(isint(vecTrialTypes)) && range(vecTrialTypes) <= (2*pi)
@@ -77,95 +74,26 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 	%pre-allocate output
 	matPosteriorProbability = zeros(intStimTypes,intTrials);
 	matAggActivation = zeros(intStimTypes,intTrials);
+	vecDecodedIndexCV = nan(1,intTrials);
 	
 	ptrTic = tic;
 	%% cross-validate
 	if numel(intTypeCV) == intTrials
-		%third input is trial repetition index
-		vecTrialRepetition = intTypeCV;
-		
-		%remove repetition
-		intRepNum = max(vecTrialRepetition);
-		matAggWeights = zeros(intNeurons+1,intStimTypes,intRepNum);
-		for intRep=1:intRepNum
-			%msg
-			if toc(ptrTic) > 5
-				ptrTic = tic;
-				pause(eps);
-				if intVerbose > 0,fprintf('Decoding; now at trial %d/%d [%s]\n',intRep,intRepNum,getTime);end
-			end
-			
-			%remove trials
-			indThisRep = vecTrialRepetition==intRep;
-			matTrainData = matData(:,~indThisRep);
-			vecTrainTrialType = vecTrialTypeIdx(~indThisRep);
-			matTestData = matData(:,indThisRep);
-			
-			%get weights
-			[matWeights, vecLLH] = doMnLogReg(matTrainData,vecTrainTrialType,dblLambda);
-			matAggWeights(:,:,intRep) = matWeights;
-			
-			%get performance
-			matDataPlusLin = [matTestData; ones(1,size(matTestData,2))];
-			matActivation = matWeights'*matDataPlusLin;
-			matPosteriorProbability(:,indThisRep) = exp(bsxfun(@minus,matActivation,logsumexp(matActivation,1))); %softmax
-
-		end
-		
-		
+		%designated sets
+		error('only repetition-wise CV has been implemented so far');
 	elseif intTypeCV == 0
 		%no CV
+		error('only repetition-wise CV has been implemented so far');
 		
-		%get weights
-		[matWeights, vecLLH] = doMnLogReg(matData,vecTrialTypeIdx,dblLambda);
-		matAggWeights = matWeights;
-		
-		%get performance
-		matDataPlusLin = [matData; ones(1,size(matData,2))];
-		matActivation = matWeights'*matDataPlusLin;
-		matPosteriorProbability = exp(bsxfun(@minus,matActivation,logsumexp(matActivation,1))); %softmax
-
 	elseif intTypeCV == 1
 		%get prob dens
-		error('this does not result in a true cross-validation; still to check what is wrong');
+		error('only repetition-wise CV has been implemented so far');
 		
-		%get weights
-		[matWeights, vecLLH] = doMnLogReg(matData,vecTrialTypeIdx,dblLambda);
-		matAggWeights = zeros(intNeurons+1,intStimTypes,intTrials);
-		
-		%get performance
-		matDataPlusLin = [matData; ones(1,size(matData,2))];
-		matActivation = matWeights'*matDataPlusLin;
-		matPosteriorProbability = exp(bsxfun(@minus,matActivation,logsumexp(matActivation,1))); %softmax
-
-		%leave one out
-		for intLeaveOut=1:intTrials
-			%get info on to-be-left-out trial
-			indSelect = ~isnan(vecTrialTypeIdx);
-			indSelect(intLeaveOut) = false;
-			intTypeCVTrial = vecTrialTypeIdx(intLeaveOut);
-			
-			%get weights
-			[matWeights, vecLLH] = doMnLogReg(matData(:,indSelect),vecTrialTypeIdx(indSelect),dblLambda);
-			matAggWeights(:,:,intLeaveOut) = matWeights;
-			
-			%get performance
-			matTestData = matData(:,intTypeCVTrial);
-			matDataPlusLin = [matTestData; ones(1,size(matTestData,2))];
-			matActivation = matWeights'*matDataPlusLin;
-			vecMax = exp(bsxfun(@minus,matActivation,logsumexp(matActivation,1)))';
-			matPosteriorProbability(intTypeCVTrial,intLeaveOut) = vecMax(intTypeCVTrial); %softmax
-			
-			%msg
-			if toc(ptrTic) > 5
-				ptrTic = tic;
-				pause(eps);
-				if intVerbose > 0,fprintf('Decoding; now at trial %d/%d [%s]\n',intLeaveOut,intTrials,getTime);end
-			end
-		end
 	elseif intTypeCV == 2
 		%remove repetition
 		matAggWeights = zeros(intNeurons+1,intStimTypes,intRepNum);
+		%remove repetition
+		%matAggWeights = zeros(intNeurons+1,intStimTypes-1,intRepNum);
 		if round(intRepNum) ~= intRepNum,error([mfilename ':IncompleteRepetitions'],'Number of repetitions is not an integer');end
 		for intRep=1:intRepNum
 			%msg
@@ -175,27 +103,83 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 				if intVerbose > 0,fprintf('Decoding; now at rep %d/%d [%s]\n',intRep,intRepNum,getTime);end
 			end
 			
-			%remove trials
+			%split trials
 			indSelect = true(1,intTrials);
 			indSelect(vecRepetition==intRep) = false;
 			matTrainData = matData(:,indSelect);
 			vecTrainTrialType = vecTrialTypeIdx(indSelect);
 			matTestData = matData(:,~indSelect);
+			matSampleData = [matTestData matTrainData];
 			
-			%get weights
-			[matWeights, vecLLH] = doMnLogReg(matTrainData,vecTrainTrialType,dblLambda);
+			%% calculate test probabilities by fitting a multivariate gaussian to the training data
+			matMeans = NaN(intNeurons,intStimTypes);
+			for k = 1:intStimTypes
+				matMeans(:,k) = mean(matTrainData(:,vecTrainTrialType==k),2);
+			end
 			
-			%get performance
-			matAggWeights(:,:,intRep) = matWeights;
-			matDataPlusLin = [matTestData; ones(1,size(matTestData,2))];
-			matActivation = matWeights'*matDataPlusLin;
-			matAggActivation(:,~indSelect) = matActivation;
-			matPosteriorProbability(:,~indSelect) = exp(bsxfun(@minus,matActivation,logsumexp(matActivation,1))); %softmax
+			%center data
+			matTrainCentered = matTrainData' - matMeans(:,vecTrainTrialType)';
+			
+			% QR decomposition
+			[Q,R] = qr(matTrainCentered, 0);
+			R = R / sqrt(sum(indSelect) - intStimTypes); % SigmaHat = R'*R
+			s = svd(R);
+			if any(s <= max(numel(indSelect),intNeurons) * eps(max(s)))
+				error(message('stats:classify:BadLinearVar'));
+			end
+			logDetSigma = 2*sum(log(s)); % avoid over/underflow
+			
+			% calculate log probabilities
+			D_full = NaN(intTrials, intStimTypes);
+			for k = 1:intStimTypes
+				A = bsxfun(@minus,matSampleData', matMeans(:,k)') / R;
+				D_full(:,k) = log(1/intStimTypes) - .5*(sum(A .* A, 2) + logDetSigma);
+			end
+			
+			if dblLambda > 0 %skip if not required
+				%naive Bayes (independent)
+				S = std(matTrainCentered) * sqrt((sum(indSelect)-1)./(sum(indSelect)-intStimTypes));
+				D_diag = NaN(intTrials, intStimTypes);
+				for k = 1:intStimTypes
+					A=bsxfun(@times, bsxfun(@minus,matSampleData',matMeans(:,k)'),1./S);
+					D_diag(:,k) = log(1/intStimTypes) - .5*(sum(A .* A, 2) + logDetSigma);
+				end
+			else
+				D_diag = 0;
+			end
+			
+			
+			if isinf(dblLambda)%special case to avoid numerial overflow
+				%take only D_diag
+				D = D_diag;
+			else
+				%weight probabilities by lambda ratio
+				D = (dblLambda*D_diag + D_full) / (1 + dblLambda);
+			end
+			
+			% find highest log probability for each trial
+			maxD = max(D, [], 2);
+			
+			%because of earlier reordering, the first intStimTypes trials are the test set
+			% Bayes' rule: first compute p{x,G_j} = p{x|G_j}Pr{G_j} ...
+			% (scaled by max(p{x,G_j}) to avoid over/underflow)
+			% ... then Pr{G_j|x) = p(x,G_j} / sum(p(x,G_j}) ...
+			% (numer and denom are both scaled, so it cancels out)
+			
+			%likelihoods of test data for each class, scaled to max likelihood
+			P = exp(bsxfun(@minus,D(1:intStimTypes,:),maxD(1:intStimTypes)));
+			%rescale over P
+			sumP = nansum(P,2);
+			
+			%assign output
+			matTestPosterior = bsxfun(@times,P,1./(sumP));
+			matPosteriorProbability(:,~indSelect) = matTestPosterior;
 		end
 	else
 		error([mfilename ':SyntaxError'],'CV type not recognized');
 	end
 	
+	%% use posterior to calculate classes
 	%check if posterior is valid
 	if any(isnan(matPosteriorProbability))
 		warning([mfilename ':PosteriorNaN'],'Posterior contains NaNs; either your data are corrupt or contain zero-variance predictors. Try increasing the regularization parameter lamdba to improve numerical stability. I have set all nans to 0.');

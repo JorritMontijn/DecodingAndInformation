@@ -1,15 +1,15 @@
-function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErrorDegs,matConfusion,matWeights,matAggActivation] = ...
+function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErrorDegs,matConfusion,matWeights] = ...
 		doCrossValidatedDecoding(matData,vecTrialTypes,intTypeCV,vecPriorDistribution,dblLambda)
 	%doCrossValidatedDecoding Linear multivariate Gaussian decoder
-	%[dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErrorDegs,matConfusion,matWeights,matAggActivation] = ...
+	%[dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErrorDegs,matConfusion,matWeights] = ...
 	%	doCrossValidatedDecoding(matData,vecTrialTypes,intTypeCV,vecPriorDistribution,dblLambda)
 	%
 	%Inputs:
 	% - matData; [n x p]  Matrix of n observations/trials of p predictors/neurons
 	% - vecTrialTypes; [n x 1] Trial indexing vector of c classes in n observations/trials
-	% - intTypeCV; [int or vec] Integer switch 0-2 or trial repetition vector. 
+	% - intTypeCV; [int or vec] Integer switch 0-2 or trial repetition vector.
 	%				Val=0, no CV; val=1, leave-one-out CV, val=2 (or
-	%				vector), leave-repetition-out. 
+	%				vector), leave-repetition-out.
 	% - vecPriorDistribution: (optional) vector specifying # per trial type
 	% - dblLambda; [scalar] Regularization: 0=full MVN, inf=independent naive Bayes, in-between=mix
 	%
@@ -73,27 +73,68 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 	
 	%pre-allocate output
 	matPosteriorProbability = zeros(intStimTypes,intTrials);
-	matAggActivation = zeros(intStimTypes,intTrials);
-	vecDecodedIndexCV = nan(1,intTrials);
 	
 	ptrTic = tic;
 	%% cross-validate
 	if numel(intTypeCV) == intTrials
 		%designated sets
-		error('only repetition-wise CV has been implemented so far');
+		
+		%third input is fold index
+		vecFoldIdx = intTypeCV;
+		intFoldNum = max(vecFoldIdx);
+		
+		for intFold=1:intFoldNum
+			%msg
+			if toc(ptrTic) > 5
+				ptrTic = tic;
+				pause(eps);
+				if intVerbose > 0,fprintf('Decoding; now at fold %d/%d [%s]\n',intFold,intFoldNum,getTime);end
+			end
+			
+			%split trials
+			indSelect = true(1,intTrials);
+			indSelect(vecFoldIdx==intFold) = false;
+			matTrainData = matData(:,indSelect);
+			vecTrainTrialType = vecTrialTypeIdx(indSelect);
+			matTestData = matData(:,~indSelect);
+			
+			%% calculate test probabilities by fitting a multivariate gaussian to the training data
+			matTestPosterior = doMvnDec(matTrainData,vecTrainTrialType,matTestData,dblLambda);
+			%assign output
+			matPosteriorProbability(:,~indSelect) = matTestPosterior;
+		end
+		
 	elseif intTypeCV == 0
 		%no CV
-		error('only repetition-wise CV has been implemented so far');
-		
+		matPosteriorProbability = doMvnDec(matData,vecTrialTypeIdx,matData,dblLambda)';
+			
 	elseif intTypeCV == 1
-		%get prob dens
-		error('only repetition-wise CV has been implemented so far');
+		%leave one out
+		for intLeaveOut=1:intTrials
+			%get info on to-be-left-out trial
+			indSelect = true(1,intTrials);
+			indSelect(intLeaveOut) = false;
+			
+			%split trials
+			matTrainData = matData(:,indSelect);
+			vecTrainTrialType = vecTrialTypeIdx(indSelect);
+			matTestData = matData(:,~indSelect);
+			
+			%% calculate test probabilities by fitting a multivariate gaussian to the training data
+			matTestPosterior = doMvnDec(matTrainData,vecTrainTrialType,matTestData,dblLambda);
+			%assign output
+			matPosteriorProbability(:,~indSelect) = matTestPosterior;
+			
+			%msg
+			if toc(ptrTic) > 5
+				ptrTic = tic;
+				pause(eps);
+				if intVerbose > 0,fprintf('Decoding; now at trial %d/%d [%s]\n',intLeaveOut,intTrials,getTime);end
+			end
+		end
 		
 	elseif intTypeCV == 2
 		%remove repetition
-		matAggWeights = zeros(intNeurons+1,intStimTypes,intRepNum);
-		%remove repetition
-		%matAggWeights = zeros(intNeurons+1,intStimTypes-1,intRepNum);
 		if round(intRepNum) ~= intRepNum,error([mfilename ':IncompleteRepetitions'],'Number of repetitions is not an integer');end
 		for intRep=1:intRepNum
 			%msg
@@ -109,70 +150,10 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 			matTrainData = matData(:,indSelect);
 			vecTrainTrialType = vecTrialTypeIdx(indSelect);
 			matTestData = matData(:,~indSelect);
-			matSampleData = [matTestData matTrainData];
 			
 			%% calculate test probabilities by fitting a multivariate gaussian to the training data
-			matMeans = NaN(intNeurons,intStimTypes);
-			for k = 1:intStimTypes
-				matMeans(:,k) = mean(matTrainData(:,vecTrainTrialType==k),2);
-			end
-			
-			%center data
-			matTrainCentered = matTrainData' - matMeans(:,vecTrainTrialType)';
-			
-			% QR decomposition
-			[Q,R] = qr(matTrainCentered, 0);
-			R = R / sqrt(sum(indSelect) - intStimTypes); % SigmaHat = R'*R
-			s = svd(R);
-			if any(s <= max(numel(indSelect),intNeurons) * eps(max(s)))
-				error(message('stats:classify:BadLinearVar'));
-			end
-			logDetSigma = 2*sum(log(s)); % avoid over/underflow
-			
-			% calculate log probabilities
-			D_full = NaN(intTrials, intStimTypes);
-			for k = 1:intStimTypes
-				A = bsxfun(@minus,matSampleData', matMeans(:,k)') / R;
-				D_full(:,k) = log(1/intStimTypes) - .5*(sum(A .* A, 2) + logDetSigma);
-			end
-			
-			if dblLambda > 0 %skip if not required
-				%naive Bayes (independent)
-				S = std(matTrainCentered) * sqrt((sum(indSelect)-1)./(sum(indSelect)-intStimTypes));
-				D_diag = NaN(intTrials, intStimTypes);
-				for k = 1:intStimTypes
-					A=bsxfun(@times, bsxfun(@minus,matSampleData',matMeans(:,k)'),1./S);
-					D_diag(:,k) = log(1/intStimTypes) - .5*(sum(A .* A, 2) + logDetSigma);
-				end
-			else
-				D_diag = 0;
-			end
-			
-			
-			if isinf(dblLambda)%special case to avoid numerial overflow
-				%take only D_diag
-				D = D_diag;
-			else
-				%weight probabilities by lambda ratio
-				D = (dblLambda*D_diag + D_full) / (1 + dblLambda);
-			end
-			
-			% find highest log probability for each trial
-			maxD = max(D, [], 2);
-			
-			%because of earlier reordering, the first intStimTypes trials are the test set
-			% Bayes' rule: first compute p{x,G_j} = p{x|G_j}Pr{G_j} ...
-			% (scaled by max(p{x,G_j}) to avoid over/underflow)
-			% ... then Pr{G_j|x) = p(x,G_j} / sum(p(x,G_j}) ...
-			% (numer and denom are both scaled, so it cancels out)
-			
-			%likelihoods of test data for each class, scaled to max likelihood
-			P = exp(bsxfun(@minus,D(1:intStimTypes,:),maxD(1:intStimTypes)));
-			%rescale over P
-			sumP = nansum(P,2);
-			
+			matTestPosterior = doMvnDec(matTrainData,vecTrainTrialType,matTestData,dblLambda);
 			%assign output
-			matTestPosterior = bsxfun(@times,P,1./(sumP));
 			matPosteriorProbability(:,~indSelect) = matTestPosterior;
 		end
 	else
@@ -205,9 +186,9 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 			%remove trials of type that has been chosen max number
 			matTempProbs(vecPriorDistribution==0,:) = nan;
 			matTempProbs(:,indAssignedTrials) = nan;
-		
+			
 			%calculate probability of remaining trials and types
-			[vecTempProbs,vecTempDecodedIndexCV]=max(matTempProbs,[],1);	
+			[vecTempProbs,vecTempDecodedIndexCV]=max(matTempProbs,[],1);
 			%get 2nd most likely stim per trial
 			matDist2 = matTempProbs;
 			for intT2=1:intTrials
@@ -255,4 +236,75 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 		matWeights = mean(matAggWeights,3);
 	end
 end
-
+function matTestPosterior = doMvnDec(matTrainData,vecTrainTrialType,matTestData,dblLambda)
+	%% calculate test probabilities by fitting a multivariate gaussian to the training data
+	%get variables
+	matSampleData = [matTestData matTrainData];
+	[intNeurons,intTrials] = size(matSampleData);
+	intStimTypes = length(unique(vecTrainTrialType));
+	intTrainTrials = size(matTrainData,2);
+	intTestTrials = size(matTestData,2);
+	
+	%prep data
+	matMeans = NaN(intNeurons,intStimTypes);
+	for k = 1:intStimTypes
+		matMeans(:,k) = mean(matTrainData(:,vecTrainTrialType==k),2);
+	end
+	
+	%center data
+	matTrainCentered = matTrainData' - matMeans(:,vecTrainTrialType)';
+	
+	% QR decomposition
+	[Q,R] = qr(matTrainCentered, 0);
+	R = R / sqrt(intTrainTrials - intStimTypes); % SigmaHat = R'*R
+	s = svd(R);
+	if any(s <= max(intTrainTrials,intNeurons) * eps(max(s)))
+		error(message('stats:classify:BadLinearVar'));
+	end
+	logDetSigma = 2*sum(log(s)); % avoid over/underflow
+	
+	% calculate log probabilities
+	D_full = NaN(intTrials, intStimTypes);
+	for k = 1:intStimTypes
+		A = bsxfun(@minus,matSampleData', matMeans(:,k)') / R;
+		D_full(:,k) = log(1/intStimTypes) - .5*(sum(A .* A, 2) + logDetSigma);
+	end
+	
+	if dblLambda > 0 %skip if not required
+		%naive Bayes (independent)
+		S = std(matTrainCentered) * sqrt((intTrainTrials-1)./(intTrainTrials-intStimTypes));
+		D_diag = NaN(intTrials, intStimTypes);
+		for k = 1:intStimTypes
+			A=bsxfun(@times, bsxfun(@minus,matSampleData',matMeans(:,k)'),1./S);
+			D_diag(:,k) = log(1/intStimTypes) - .5*(sum(A .* A, 2) + logDetSigma);
+		end
+	else
+		D_diag = 0;
+	end
+	
+	
+	if isinf(dblLambda)%special case to avoid numerial overflow
+		%take only D_diag
+		D = D_diag;
+	else
+		%weight probabilities by lambda ratio
+		D = (dblLambda*D_diag + D_full) / (1 + dblLambda);
+	end
+	
+	% find highest log probability for each trial
+	maxD = max(D, [], 2);
+	
+	%because of earlier reordering, the first intStimTypes trials are the test set
+	% Bayes' rule: first compute p{x,G_j} = p{x|G_j}Pr{G_j} ...
+	% (scaled by max(p{x,G_j}) to avoid over/underflow)
+	% ... then Pr{G_j|x) = p(x,G_j} / sum(p(x,G_j}) ...
+	% (numer and denom are both scaled, so it cancels out)
+	
+	%likelihoods of test data for each class, scaled to max likelihood
+	P = exp(bsxfun(@minus,D(1:intTestTrials,:),maxD(1:intTestTrials)));
+	%rescale over P
+	sumP = nansum(P,2);
+	
+	%assign output
+	matTestPosterior = bsxfun(@times,P,1./(sumP));
+end

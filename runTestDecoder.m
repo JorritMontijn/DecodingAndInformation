@@ -37,7 +37,7 @@ matSpikeCounts = getSpikeCounts(cellSpikeTimes,vecOnsets,vecOffsets);
 %% test 1
 vecNeuronsX = 1:(intNeuronNum-1);%:round((intNeuronNum/2));
 vecNeuronsY = find(~ismember(1:intNeuronNum,vecNeuronsX));
-vecTrialTypes = vecTrialAngles;%vecTrialTypes(randperm(numel(vecTrialAngles)));
+vecTrialTypes = vecTrialTypes(randperm(numel(vecTrialAngles)));
 [vecTrialTypeIdx,vecUniqueTrialTypes,vecCounts,cellSelect,vecRepetition] = val2idx(vecTrialTypes);
 varTypeCV = 2;
 dblLambda = 1;
@@ -63,3 +63,27 @@ tic
 toc
 subplot(2,3,3)
 imagesc(matConfusion3)
+
+% test 4
+tic
+[dblPerformanceCV4,vecDecodedIndexCV2,matPosteriorProbability2,dblMeanErrorDegs2,matConfusion4] ...
+	= doCrossValidatedDecoding(matSpikeCounts,vecTrialTypes,0,vecCounts,dblLambda);
+toc
+subplot(2,3,4)
+imagesc(matConfusion4)
+
+% test 5
+tic
+[dblPerformanceCV5,vecDecodedIndexCV2,matPosteriorProbability2,dblMeanErrorDegs2,matConfusion5] ...
+	= doCrossValidatedDecoding(matSpikeCounts,vecTrialTypes,1,vecCounts,dblLambda);
+toc
+subplot(2,3,5)
+imagesc(matConfusion5)
+
+% test 6
+tic
+[dblPerformanceCV6,vecDecodedIndexCV2,matPosteriorProbability2,dblMeanErrorDegs2,matConfusion6] ...
+	= doCrossValidatedDecoding(matSpikeCounts,vecTrialTypes,vecRepetition,vecCounts,dblLambda);
+toc
+subplot(2,3,6)
+imagesc(matConfusion6)

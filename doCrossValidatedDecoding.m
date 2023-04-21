@@ -1,17 +1,17 @@
-function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErrorDegs,matConfusion,matWeights] = ...
+function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErrorDegs,matConfusion] = ...
 		doCrossValidatedDecoding(matData,vecTrialTypes,intTypeCV,vecPriorDistribution,dblLambda)
 	%doCrossValidatedDecoding Linear multivariate Gaussian decoder
-	%[dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErrorDegs,matConfusion,matWeights] = ...
+	%[dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErrorDegs,matConfusion] = ...
 	%	doCrossValidatedDecoding(matData,vecTrialTypes,intTypeCV,vecPriorDistribution,dblLambda)
 	%
 	%Inputs:
 	% - matData; [n x p]  Matrix of n observations/trials of p predictors/neurons
 	% - vecTrialTypes; [n x 1] Trial indexing vector of c classes in n observations/trials
 	% - intTypeCV; [int or vec] Integer switch 0-2 or trial repetition vector.
-	%				Val=0, no CV; val=1, leave-one-out CV, val=2 (or
-	%				vector), leave-repetition-out.
+	%				Val=0, no CV; val=1, leave-one-out CV, val=2 leave-repetition-out.
+	%				Val=vector, specifies fold indices for k-fold CV
 	% - vecPriorDistribution: (optional) vector specifying # per trial type
-	% - dblLambda; [scalar] Regularization: 0=full MVN, inf=independent naive Bayes, in-between=mix
+	% - dblLambda; [scalar] "Regularization": 0=full MVN, inf=independent naive Bayes, in-between=mix
 	%
 	%Outputs:
 	% - dblPerformance; [scalar] Fraction of correct classifications
@@ -19,8 +19,6 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 	% - matPosteriorProbability; posterior probabilities
 	% - dblMeanErrorDegs; [scalar] If vecTrialTypes is in radians, error in degrees
 	% - matConfusion; [c x c] Confusion matrix of [(decoded class) x (real class)]
-	% - matWeights; averaged weight matrix (not cross-validated!)
-	% - matAggActivation; CV activation matrix
 	%
 	%Version History:
 	%2023-04-20 Created function [by Jorrit Montijn]
@@ -230,11 +228,6 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 		matConfusion = getFillGrid(zeros(intStimTypes),vecDecodedIndexCV,vecTrialTypeIdx,ones(intTrials,1));
 		%imagesc(matConfusion,[0 1]);colormap(hot);axis xy;colorbar;
 	end
-	
-	%calc aggregate weights
-	if nargout > 5
-		matWeights = mean(matAggWeights,3);
-	end
 end
 function matTestPosterior = doMvnDec(matTrainData,vecTrainTrialType,matTestData,dblLambda)
 	%% calculate test probabilities by fitting a multivariate gaussian to the training data
@@ -258,9 +251,6 @@ function matTestPosterior = doMvnDec(matTrainData,vecTrainTrialType,matTestData,
 	[Q,R] = qr(matTrainCentered, 0);
 	R = R / sqrt(intTrainTrials - intStimTypes); % SigmaHat = R'*R
 	s = svd(R);
-	if any(s <= max(intTrainTrials,intNeurons) * eps(max(s)))
-		error(message('stats:classify:BadLinearVar'));
-	end
 	logDetSigma = 2*sum(log(s)); % avoid over/underflow
 	
 	% calculate log probabilities
@@ -294,7 +284,7 @@ function matTestPosterior = doMvnDec(matTrainData,vecTrainTrialType,matTestData,
 	% find highest log probability for each trial
 	maxD = max(D, [], 2);
 	
-	%because of earlier reordering, the first intStimTypes trials are the test set
+	%because of earlier reordering, the first intTestTrials trials are the test set
 	% Bayes' rule: first compute p{x,G_j} = p{x|G_j}Pr{G_j} ...
 	% (scaled by max(p{x,G_j}) to avoid over/underflow)
 	% ... then Pr{G_j|x) = p(x,G_j} / sum(p(x,G_j}) ...

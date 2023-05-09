@@ -170,44 +170,8 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 		%calculate output
 		[dummy, vecDecodedIndexCV] = max(matPosteriorProbability,[],1);
 	else
-		%% loop through trials and assign next most certain trial
-		vecDecodedIndexCV = nan(intTrials,1);
-		indAssignedTrials = false(intTrials,1);
-		matTempProbs = matPosteriorProbability;
-		for intTrial=1:intTrials
-			%check if we're done
-			if sum(vecPriorDistribution==0)==(numel(vecPriorDistribution)-1)
-				vecDecodedIndexCV(~indAssignedTrials) = find(vecPriorDistribution>0);
-				break;
-			end
-			
-			%remove trials of type that has been chosen max number
-			matTempProbs(vecPriorDistribution==0,:) = nan;
-			matTempProbs(:,indAssignedTrials) = nan;
-			
-			%calculate probability of remaining trials and types
-			[vecTempProbs,vecTempDecodedIndexCV]=max(matTempProbs,[],1);
-			%get 2nd most likely stim per trial
-			matDist2 = matTempProbs;
-			for intT2=1:intTrials
-				matDist2(vecTempDecodedIndexCV(intT2),intT2) = nan;
-			end
-			[vecTempProbs2,vecTempDecodedIndexCV2]=max(matDist2,[],1);
-			
-			%use trial with largest difference between most likely and 2nd most likely stimulus
-			vecMaxDiff = abs(vecTempProbs2 - vecTempProbs);
-			%assign trial
-			[dummy,intAssignTrial]=max(vecMaxDiff);
-			intAssignType = vecTempDecodedIndexCV(intAssignTrial);
-			if vecPriorDistribution(intAssignType) == 0
-				intAssignType = vecTempDecodedIndexCV2(intAssignTrial);
-			end
-			vecDecodedIndexCV(intAssignTrial) = intAssignType;
-			indAssignedTrials(intAssignTrial) = true;
-			vecPriorDistribution(intAssignType) = vecPriorDistribution(intAssignType) - 1;
-			%fprintf('assigned %d to %d; %s\n',intAssignType,intAssignTrial,sprintf('%d ',vecPriorDistribution))
-			%pause
-		end
+		%use prior distro for assignments
+		vecDecodedIndexCV = doDecClassify(matPosteriorProbability,vecPriorDistribution);
 	end
 	dblPerformanceCV=sum(vecDecodedIndexCV(:) == vecTrialTypeIdx)/length(vecDecodedIndexCV);
 	
@@ -228,73 +192,4 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 		matConfusion = getFillGrid(zeros(intStimTypes),vecDecodedIndexCV,vecTrialTypeIdx,ones(intTrials,1));
 		%imagesc(matConfusion,[0 1]);colormap(hot);axis xy;colorbar;
 	end
-end
-function matTestPosterior = doMvnDec(matTrainData,vecTrainTrialType,matTestData,dblLambda)
-	%% calculate test probabilities by fitting a multivariate gaussian to the training data
-	%get variables
-	matSampleData = [matTestData matTrainData];
-	[intNeurons,intTrials] = size(matSampleData);
-	intStimTypes = length(unique(vecTrainTrialType));
-	intTrainTrials = size(matTrainData,2);
-	intTestTrials = size(matTestData,2);
-	
-	%prep data
-	matMeans = NaN(intNeurons,intStimTypes);
-	for k = 1:intStimTypes
-		matMeans(:,k) = mean(matTrainData(:,vecTrainTrialType==k),2);
-	end
-	
-	%center data
-	matTrainCentered = matTrainData' - matMeans(:,vecTrainTrialType)';
-	
-	% QR decomposition
-	[Q,R] = qr(matTrainCentered, 0);
-	R = R / sqrt(intTrainTrials - intStimTypes); % SigmaHat = R'*R
-	s = svd(R);
-	logDetSigma = 2*sum(log(s)); % avoid over/underflow
-	
-	% calculate log probabilities
-	D_full = NaN(intTrials, intStimTypes);
-	for k = 1:intStimTypes
-		A = bsxfun(@minus,matSampleData', matMeans(:,k)') / R;
-		D_full(:,k) = log(1/intStimTypes) - .5*(sum(A .* A, 2) + logDetSigma);
-	end
-	
-	if dblLambda > 0 %skip if not required
-		%naive Bayes (independent)
-		S = std(matTrainCentered) * sqrt((intTrainTrials-1)./(intTrainTrials-intStimTypes));
-		D_diag = NaN(intTrials, intStimTypes);
-		for k = 1:intStimTypes
-			A=bsxfun(@times, bsxfun(@minus,matSampleData',matMeans(:,k)'),1./S);
-			D_diag(:,k) = log(1/intStimTypes) - .5*(sum(A .* A, 2) + logDetSigma);
-		end
-	else
-		D_diag = 0;
-	end
-	
-	
-	if isinf(dblLambda)%special case to avoid numerial overflow
-		%take only D_diag
-		D = D_diag;
-	else
-		%weight probabilities by lambda ratio
-		D = (dblLambda*D_diag + D_full) / (1 + dblLambda);
-	end
-	
-	% find highest log probability for each trial
-	maxD = max(D, [], 2);
-	
-	%because of earlier reordering, the first intTestTrials trials are the test set
-	% Bayes' rule: first compute p{x,G_j} = p{x|G_j}Pr{G_j} ...
-	% (scaled by max(p{x,G_j}) to avoid over/underflow)
-	% ... then Pr{G_j|x) = p(x,G_j} / sum(p(x,G_j}) ...
-	% (numer and denom are both scaled, so it cancels out)
-	
-	%likelihoods of test data for each class, scaled to max likelihood
-	P = exp(bsxfun(@minus,D(1:intTestTrials,:),maxD(1:intTestTrials)));
-	%rescale over P
-	sumP = nansum(P,2);
-	
-	%assign output
-	matTestPosterior = bsxfun(@times,P,1./(sumP));
 end

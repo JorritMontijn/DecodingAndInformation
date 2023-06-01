@@ -17,13 +17,14 @@ function matTestPosterior = doMvnDec(matTrainData,vecTrainTrialType,matTestData,
 	matTrainCentered = matTrainData' - matMeans(:,vecTrainTrialType)';
 	
 	% QR decomposition
-	[Q,R] = qr(matTrainCentered, 0);
+	X = qr(matTrainCentered, 0);
+	R = triu(X);
 	R = R / sqrt(intTrainTrials - intStimTypes); % SigmaHat = R'*R
 	s = svd(R);
 	logDetSigma = 2*sum(log(s)); % avoid over/underflow
 	
 	% calculate log probabilities
-	D_full = NaN(intTrials, intStimTypes);
+	D_full = NaN(intTrials, intStimTypes,'single');
 	for k = 1:intStimTypes
 		A = bsxfun(@minus,matSampleData', matMeans(:,k)') / R;
 		D_full(:,k) = log(1/intStimTypes) - .5*(sum(A .* A, 2) + logDetSigma);

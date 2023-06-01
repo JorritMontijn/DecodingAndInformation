@@ -46,6 +46,7 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 	
 	%% prepare
 	intVerbose = 1;
+	strClass = class(matData);
 	
 	%get number of trials
 	if ~all(isint(vecTrialTypes)) && range(vecTrialTypes) <= (2*pi)
@@ -75,8 +76,10 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 	end
 	
 	%pre-allocate output
-	matPosteriorProbability = zeros(intStimTypes,intTrials);
-	matAggActivation = zeros(intStimTypes,intTrials);
+	matPosteriorProbability = zeros(intStimTypes,intTrials,strClass);
+	if nargout > 6
+		matAggActivation = zeros(intStimTypes,intTrials,strClass);
+	end
 	
 	ptrTic = tic;
 	%% cross-validate
@@ -86,7 +89,9 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 		
 		%remove repetition
 		intRepNum = max(vecTrialRepetition);
-		matAggWeights = zeros(intNeurons+1,intStimTypes,intRepNum);
+		if nargout > 5
+			matAggWeights = zeros(intNeurons+1,intStimTypes,intRepNum,strClass);
+		end
 		for intRep=1:intRepNum
 			%msg
 			if toc(ptrTic) > 5
@@ -103,8 +108,9 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 			
 			%get weights
 			[matWeights, vecLLH] = doMnLogReg(matTrainData,vecTrainTrialType,dblLambda);
-			matAggWeights(:,:,intRep) = matWeights;
-			
+			if nargout > 5
+				matAggWeights(:,:,intRep) = matWeights;
+			end
 			%get performance
 			matDataPlusLin = [matTestData; ones(1,size(matTestData,2))];
 			matActivation = matWeights'*matDataPlusLin;
@@ -118,8 +124,9 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 		
 		%get weights
 		[matWeights, vecLLH] = doMnLogReg(matData,vecTrialTypeIdx,dblLambda);
-		matAggWeights = matWeights;
-		
+		if nargout > 5
+			matAggWeights = matWeights;
+		end
 		%get performance
 		matDataPlusLin = [matData; ones(1,size(matData,2))];
 		matActivation = matWeights'*matDataPlusLin;
@@ -131,7 +138,9 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 		
 		%get weights
 		[matWeights, vecLLH] = doMnLogReg(matData,vecTrialTypeIdx,dblLambda);
-		matAggWeights = zeros(intNeurons+1,intStimTypes,intTrials);
+		if nargout > 5
+			matAggWeights = zeros(intNeurons+1,intStimTypes,intTrials);
+		end
 		
 		%get performance
 		matDataPlusLin = [matData; ones(1,size(matData,2))];
@@ -147,8 +156,9 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 			
 			%get weights
 			[matWeights, vecLLH] = doMnLogReg(matData(:,indSelect),vecTrialTypeIdx(indSelect),dblLambda);
-			matAggWeights(:,:,intLeaveOut) = matWeights;
-			
+			if nargout > 5
+				matAggWeights(:,:,intLeaveOut) = matWeights;
+			end
 			%get performance
 			matTestData = matData(:,intTypeCVTrial);
 			matDataPlusLin = [matTestData; ones(1,size(matTestData,2))];
@@ -165,7 +175,9 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 		end
 	elseif intTypeCV == 2
 		%remove repetition
-		matAggWeights = zeros(intNeurons+1,intStimTypes,intRepNum);
+		if nargout > 5
+			matAggWeights = zeros(intNeurons+1,intStimTypes,intRepNum);
+		end
 		if round(intRepNum) ~= intRepNum,error([mfilename ':IncompleteRepetitions'],'Number of repetitions is not an integer');end
 		for intRep=1:intRepNum
 			%msg
@@ -186,11 +198,15 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 			[matWeights, vecLLH] = doMnLogReg(matTrainData,vecTrainTrialType,dblLambda);
 			
 			%get performance
-			matAggWeights(:,:,intRep) = matWeights;
 			matDataPlusLin = [matTestData; ones(1,size(matTestData,2))];
 			matActivation = matWeights'*matDataPlusLin;
-			matAggActivation(:,~indSelect) = matActivation;
 			matPosteriorProbability(:,~indSelect) = exp(bsxfun(@minus,matActivation,logsumexp(matActivation,1))); %softmax
+			if nargout > 5
+				matAggWeights(:,:,intRep) = matWeights;
+			end
+			if nargout > 6
+				matAggActivation(:,~indSelect) = matActivation;
+			end
 		end
 	else
 		error([mfilename ':SyntaxError'],'CV type not recognized');

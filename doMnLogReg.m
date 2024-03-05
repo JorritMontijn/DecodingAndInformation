@@ -13,7 +13,7 @@ function [matWeights, dblLLH] = doMnLogReg(matData, vecTrialTypes, dblLambda)
 		dblLambda = 0;
 	end
 	matData = [matData; ones(1,size(matData,2))];
-	[matWeights, dblLLH] = newtonRaphson(matData, label2idx(vecTrialTypes), dblLambda);
+	[matWeights, dblLLH] = newtonRaphson(matData, val2idx(vecTrialTypes), dblLambda);
 end
 function [matWeights, dblLLH] = newtonRaphson(matData, vecTrialTypes, dblLambda)
 	[intNeurons,intTrials] = size(matData); %number of predictors (neurons) and observations (trials)

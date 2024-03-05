@@ -1,7 +1,7 @@
-function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErrorDegs,matConfusion,matWeights,matAggActivation,matAggWeights,vecRepetition] = doCrossValidatedDecodingLR(matData,vecTrialTypes,intTypeCV,vecPriorDistribution,dblLambda)
+function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErrorDegs,matConfusion,matWeights,matAggActivation,matAggWeights,vecRepetition] = doCrossValidatedDecodingLR(matData,vecTrialTypes,intTypeCV,vecPriorDistribution,dblLambda,intVerbose)
 	%doCrossValidatedDecodingLR Logistic regression classifier.
 	%[dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErrorDegs,matConfusion,matWeights,matAggActivation,matAggWeights,vecRepetition] = ...
-	%	doCrossValidatedDecodingLR(matData,vecTrialTypes,intTypeCV,vecPriorDistribution,dblLambda)
+	%	doCrossValidatedDecodingLR(matData,vecTrialTypes,intTypeCV,vecPriorDistribution,dblLambda,intVerbose)
 	%
 	%Inputs:
 	% - matData; [n x p]  Matrix of n observations/trials of p predictors/neurons
@@ -43,9 +43,12 @@ function [dblPerformanceCV,vecDecodedIndexCV,matPosteriorProbability,dblMeanErro
 	if ~exist('vecPriorDistribution','var')
 		vecPriorDistribution = [];
 	end
+	%prior distribution
+	if ~exist('intVerbose','var')
+		intVerbose = 1;
+	end
 	
 	%% prepare
-	intVerbose = 1;
 	strClass = class(matData);
 	
 	%get number of trials
